@@ -8,6 +8,7 @@ import DCAModel from './components/DCAModel/DCAModel';
 import ActionPlan from './components/ActionPlan/ActionPlan';
 import DataStatus from './components/DataStatus/DataStatus';
 import BusinessCycleChart from './components/BusinessCycleChart/BusinessCycleChart';
+import RatioCharts from './components/RatioCharts/RatioCharts';
 import './styles/tokens.css';
 import './styles/global.css';
 
@@ -113,6 +114,11 @@ function App() {
             unemployment={metrics.unemployment}
             dcaModel={dcaModel}
           />
+        </div>
+
+        {/* Ratio Charts - TradingView embedded */}
+        <div className="section">
+          <RatioCharts />
         </div>
 
         {/* Business Cycle Chart - Full width */}
