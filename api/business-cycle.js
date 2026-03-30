@@ -42,6 +42,40 @@ async function fetchFredSeries(seriesId, apiKey, startDate = '1960-01-01') {
     }));
 }
 
+// Fetch SPX from Yahoo Finance (has much longer history than FRED's 10-year limit)
+async function fetchSPXFromYahoo() {
+  // Start from 1960 (Unix timestamp)
+  const startTimestamp = -315619200; // Jan 1, 1960
+  const endTimestamp = Math.floor(Date.now() / 1000);
+
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1=${startTimestamp}&period2=${endTimestamp}&interval=1mo&events=history`;
+
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Yahoo Finance error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const result = data.chart?.result?.[0];
+  if (!result) throw new Error('No SPX data from Yahoo Finance');
+
+  const timestamps = result.timestamp || [];
+  const closes = result.indicators?.quote?.[0]?.close || [];
+
+  return timestamps.map((ts, i) => {
+    const date = new Date(ts * 1000);
+    // Normalize to first of month for alignment (YYYY-MM-01)
+    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
+    return { date: dateStr, value: closes[i] };
+  }).filter(obs => obs.value != null && !isNaN(obs.value));
+}
+
 // Calculate YoY inflation from CPI
 function calculateYoYInflation(cpiData) {
   const result = [];
@@ -112,13 +146,14 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Fetch all data in parallel - using FRED's SP500 series
+    // Fetch all data in parallel
+    // Using Yahoo Finance for SPX (FRED only has 10 years due to licensing)
     const [unrate, fedfunds, cpi, m2, spx] = await Promise.all([
       fetchFredSeries('UNRATE', apiKey),
       fetchFredSeries('FEDFUNDS', apiKey),
       fetchFredSeries('CPIAUCSL', apiKey),
       fetchFredSeries('M2SL', apiKey),
-      fetchFredSeries('SP500', apiKey),  // FRED has S&P 500 data
+      fetchSPXFromYahoo(),
     ]);
 
     // Calculate YoY inflation from CPI
