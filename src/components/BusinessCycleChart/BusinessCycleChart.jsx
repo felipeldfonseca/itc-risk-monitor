@@ -271,6 +271,7 @@ export function BusinessCycleChart() {
               />
               <YAxis
                 yAxisId="left"
+                domain={[0, 1]}
                 tickFormatter={formatYAxis}
                 tick={{ fontSize: 10, fill: 'var(--text-dim)' }}
                 axisLine={false}
