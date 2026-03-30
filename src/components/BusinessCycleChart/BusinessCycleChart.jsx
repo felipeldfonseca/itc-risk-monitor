@@ -250,11 +250,13 @@ export function BusinessCycleChart() {
               {visibleRecessions.map((recession, i) => (
                 <ReferenceArea
                   key={i}
+                  yAxisId="left"
                   x1={recession.start}
                   x2={recession.end}
                   fill="rgba(156, 163, 175, 0.25)"
                   stroke="rgba(156, 163, 175, 0.4)"
                   strokeWidth={1}
+                  ifOverflow="extendDomain"
                 />
               ))}
 
