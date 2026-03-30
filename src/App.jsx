@@ -32,12 +32,11 @@ function App() {
   // Auto-fetch hook - updates metrics when new data arrives
   const {
     isEnabled,
-    fredApiKey,
+    hasFredKey,
     isFetching,
     lastUpdate,
     errors,
     toggleEnabled,
-    updateFredApiKey,
     refresh,
   } = useAutoFetch(setAllMetrics);
 
@@ -55,12 +54,11 @@ function App() {
         {/* Data Status Bar */}
         <DataStatus
           isEnabled={isEnabled}
-          fredApiKey={fredApiKey}
+          hasFredKey={hasFredKey}
           isFetching={isFetching}
           lastUpdate={lastUpdate}
           errors={errors}
           onToggleEnabled={toggleEnabled}
-          onUpdateFredApiKey={updateFredApiKey}
           onRefresh={refresh}
         />
 

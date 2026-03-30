@@ -4,6 +4,9 @@ import { fetchCryptoPrices, fetchMarketData, fetchMacroData } from '../lib/api';
 // Storage key for API settings
 const API_SETTINGS_KEY = 'itc-monitor-api-settings';
 
+// FRED API key from environment variable
+const FRED_API_KEY = import.meta.env.VITE_FRED_API_KEY || '';
+
 // Default refresh intervals (in milliseconds)
 const REFRESH_INTERVALS = {
   crypto: 60000,      // 1 minute for crypto prices
@@ -15,14 +18,14 @@ const REFRESH_INTERVALS = {
  */
 function loadApiSettings() {
   if (typeof window === 'undefined') {
-    return { enabled: false, fredApiKey: '' };
+    return { enabled: false };
   }
 
   try {
     const stored = localStorage.getItem(API_SETTINGS_KEY);
-    return stored ? JSON.parse(stored) : { enabled: false, fredApiKey: '' };
+    return stored ? JSON.parse(stored) : { enabled: false };
   } catch {
-    return { enabled: false, fredApiKey: '' };
+    return { enabled: false };
   }
 }
 
@@ -41,12 +44,11 @@ function saveApiSettings(settings) {
 
 /**
  * Custom hook for auto-fetching live data
+ * FRED API key is read from VITE_FRED_API_KEY environment variable
  */
 export function useAutoFetch(onDataUpdate) {
-  // API settings state
-  const [settings, setSettings] = useState(loadApiSettings);
-  const [isEnabled, setIsEnabled] = useState(settings.enabled);
-  const [fredApiKey, setFredApiKey] = useState(settings.fredApiKey);
+  // API settings state (only enabled toggle is stored)
+  const [isEnabled, setIsEnabled] = useState(() => loadApiSettings().enabled);
 
   // Fetch state
   const [isFetching, setIsFetching] = useState(false);
@@ -62,6 +64,9 @@ export function useAutoFetch(onDataUpdate) {
   // Refs for interval management
   const cryptoIntervalRef = useRef(null);
   const macroIntervalRef = useRef(null);
+
+  // Check if FRED API key is available
+  const hasFredKey = Boolean(FRED_API_KEY);
 
   /**
    * Fetch crypto prices (BTC, Gold via PAXG)
@@ -105,11 +110,11 @@ export function useAutoFetch(onDataUpdate) {
    * Fetch macro data from FRED
    */
   const fetchMacro = useCallback(async () => {
-    if (!isEnabled || !fredApiKey) return;
+    if (!isEnabled || !FRED_API_KEY) return;
 
     setIsFetching(true);
     try {
-      const data = await fetchMacroData(fredApiKey);
+      const data = await fetchMacroData(FRED_API_KEY);
 
       if (data.error) {
         setErrors((prev) => ({ ...prev, macro: data.error }));
@@ -135,7 +140,7 @@ export function useAutoFetch(onDataUpdate) {
     } finally {
       setIsFetching(false);
     }
-  }, [isEnabled, fredApiKey, onDataUpdate]);
+  }, [isEnabled, onDataUpdate]);
 
   /**
    * Manual refresh trigger
@@ -149,20 +154,8 @@ export function useAutoFetch(onDataUpdate) {
    */
   const toggleEnabled = useCallback((enabled) => {
     setIsEnabled(enabled);
-    const newSettings = { enabled, fredApiKey };
-    setSettings(newSettings);
-    saveApiSettings(newSettings);
-  }, [fredApiKey]);
-
-  /**
-   * Update FRED API key
-   */
-  const updateFredApiKey = useCallback((key) => {
-    setFredApiKey(key);
-    const newSettings = { enabled: isEnabled, fredApiKey: key };
-    setSettings(newSettings);
-    saveApiSettings(newSettings);
-  }, [isEnabled]);
+    saveApiSettings({ enabled });
+  }, []);
 
   // Set up auto-fetch intervals
   useEffect(() => {
@@ -181,14 +174,14 @@ export function useAutoFetch(onDataUpdate) {
 
     // Initial fetch
     fetchCrypto();
-    if (fredApiKey) {
+    if (FRED_API_KEY) {
       fetchMacro();
     }
 
     // Set up intervals
     cryptoIntervalRef.current = setInterval(fetchCrypto, REFRESH_INTERVALS.crypto);
 
-    if (fredApiKey) {
+    if (FRED_API_KEY) {
       macroIntervalRef.current = setInterval(fetchMacro, REFRESH_INTERVALS.macro);
     }
 
@@ -200,14 +193,13 @@ export function useAutoFetch(onDataUpdate) {
         clearInterval(macroIntervalRef.current);
       }
     };
-  }, [isEnabled, fredApiKey, fetchCrypto, fetchMacro]);
+  }, [isEnabled, fetchCrypto, fetchMacro]);
 
   return {
     // Settings
     isEnabled,
-    fredApiKey,
+    hasFredKey,
     toggleEnabled,
-    updateFredApiKey,
 
     // Status
     isFetching,

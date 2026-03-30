@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { formatLastUpdate } from '../../lib/api';
 
 /**
- * DataStatus - Shows live data status and API settings
+ * DataStatus - Shows live data status and toggle
+ * FRED API key is configured via VITE_FRED_API_KEY environment variable
  */
 
 const styles = {
@@ -13,11 +14,18 @@ const styles = {
     padding: 'var(--space-3)',
     marginBottom: 'var(--space-4)',
   },
-  header: {
+  row: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 'var(--space-2)',
+    flexWrap: 'wrap',
+    gap: 'var(--space-2)',
+  },
+  left: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--space-3)',
+    flexWrap: 'wrap',
   },
   title: {
     fontSize: 'var(--text-sm)',
@@ -44,20 +52,6 @@ const styles = {
   statusDotError: {
     background: 'var(--color-red)',
   },
-  toggleBtn: {
-    fontSize: 'var(--text-sm)',
-    color: 'var(--color-blue)',
-    cursor: 'pointer',
-    background: 'transparent',
-    border: 'none',
-    padding: '4px 8px',
-  },
-  content: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: 'var(--space-3)',
-    alignItems: 'center',
-  },
   sourceGroup: {
     display: 'flex',
     alignItems: 'center',
@@ -72,45 +66,10 @@ const styles = {
     color: 'var(--text-muted)',
     fontFamily: 'var(--font-mono)',
   },
-  refreshBtn: {
-    fontSize: 'var(--text-xs)',
-    color: 'var(--color-blue)',
-    cursor: 'pointer',
-    background: 'transparent',
-    border: '1px solid var(--color-blue)',
-    borderRadius: 'var(--radius-sm)',
-    padding: '2px 8px',
-    marginLeft: 'auto',
-  },
-  refreshBtnDisabled: {
-    opacity: 0.5,
-    cursor: 'not-allowed',
-  },
-  settingsPanel: {
-    marginTop: 'var(--space-3)',
-    paddingTop: 'var(--space-3)',
-    borderTop: '1px solid var(--border-subtle)',
-  },
-  settingsRow: {
+  right: {
     display: 'flex',
     alignItems: 'center',
     gap: 'var(--space-2)',
-    marginBottom: 'var(--space-2)',
-  },
-  settingsLabel: {
-    fontSize: 'var(--text-sm)',
-    color: 'var(--text-muted)',
-    minWidth: 100,
-  },
-  input: {
-    flex: 1,
-    fontSize: 'var(--text-sm)',
-    fontFamily: 'var(--font-mono)',
-    color: 'var(--text-primary)',
-    background: 'var(--bg-input)',
-    border: '1px solid var(--border-default)',
-    borderRadius: 'var(--radius-sm)',
-    padding: '4px 8px',
   },
   toggle: {
     position: 'relative',
@@ -122,7 +81,7 @@ const styles = {
     transition: 'background var(--transition-normal)',
   },
   toggleActive: {
-    background: 'var(--color-blue)',
+    background: 'var(--color-green)',
   },
   toggleThumb: {
     position: 'absolute',
@@ -137,103 +96,110 @@ const styles = {
   toggleThumbActive: {
     transform: 'translateX(16px)',
   },
-  hint: {
+  refreshBtn: {
     fontSize: 'var(--text-xs)',
-    color: 'var(--text-dim)',
-    marginTop: 'var(--space-1)',
-  },
-  link: {
     color: 'var(--color-blue)',
-    textDecoration: 'none',
+    cursor: 'pointer',
+    background: 'transparent',
+    border: '1px solid var(--color-blue)',
+    borderRadius: 'var(--radius-sm)',
+    padding: '2px 8px',
+  },
+  refreshBtnDisabled: {
+    opacity: 0.5,
+    cursor: 'not-allowed',
   },
   errorText: {
     fontSize: 'var(--text-xs)',
     color: 'var(--color-red)',
-    marginTop: 'var(--space-1)',
+    marginTop: 'var(--space-2)',
+  },
+  hint: {
+    fontSize: 'var(--text-xs)',
+    color: 'var(--text-dim)',
+    marginTop: 'var(--space-2)',
   },
 };
 
 export function DataStatus({
   isEnabled,
-  fredApiKey,
+  hasFredKey,
   isFetching,
   lastUpdate,
   errors,
   onToggleEnabled,
-  onUpdateFredApiKey,
   onRefresh,
 }) {
-  const [showSettings, setShowSettings] = useState(false);
-  const [tempApiKey, setTempApiKey] = useState(fredApiKey);
-
   const hasErrors = errors?.crypto || errors?.macro;
   const isLive = isEnabled && !hasErrors;
 
-  const handleApiKeySubmit = () => {
-    onUpdateFredApiKey(tempApiKey);
-  };
-
-  const handleApiKeyKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      handleApiKeySubmit();
-    }
-  };
-
   return (
     <div style={styles.container}>
-      <div style={styles.header}>
-        <div style={styles.title}>
+      <div style={styles.row}>
+        <div style={styles.left}>
+          <div style={styles.title}>
+            <div
+              style={{
+                ...styles.statusDot,
+                ...(hasErrors
+                  ? styles.statusDotError
+                  : isLive
+                  ? styles.statusDotLive
+                  : styles.statusDotManual),
+              }}
+            />
+            {isLive ? 'Live Data' : isEnabled && hasErrors ? 'Error' : 'Manual Mode'}
+          </div>
+
+          <div style={styles.sourceGroup}>
+            <span style={styles.sourceLabel}>BTC/Gold:</span>
+            <span style={styles.sourceValue}>
+              {isEnabled ? formatLastUpdate(lastUpdate?.crypto) : 'Manual'}
+            </span>
+          </div>
+
+          <div style={styles.sourceGroup}>
+            <span style={styles.sourceLabel}>Macro:</span>
+            <span style={styles.sourceValue}>
+              {isEnabled && hasFredKey
+                ? formatLastUpdate(lastUpdate?.macro)
+                : hasFredKey
+                ? 'Manual'
+                : 'No env key'}
+            </span>
+          </div>
+        </div>
+
+        <div style={styles.right}>
+          {isEnabled && (
+            <button
+              style={{
+                ...styles.refreshBtn,
+                ...(isFetching ? styles.refreshBtnDisabled : {}),
+              }}
+              onClick={onRefresh}
+              disabled={isFetching}
+            >
+              {isFetching ? 'Fetching...' : 'Refresh'}
+            </button>
+          )}
+
           <div
             style={{
-              ...styles.statusDot,
-              ...(hasErrors
-                ? styles.statusDotError
-                : isLive
-                ? styles.statusDotLive
-                : styles.statusDotManual),
+              ...styles.toggle,
+              ...(isEnabled ? styles.toggleActive : {}),
             }}
-          />
-          {isLive ? 'Live Data' : isEnabled && hasErrors ? 'Error' : 'Manual Mode'}
-        </div>
-        <button
-          style={styles.toggleBtn}
-          onClick={() => setShowSettings(!showSettings)}
-        >
-          {showSettings ? 'Hide Settings' : 'Settings'}
-        </button>
-      </div>
-
-      <div style={styles.content}>
-        <div style={styles.sourceGroup}>
-          <span style={styles.sourceLabel}>BTC/Gold:</span>
-          <span style={styles.sourceValue}>
-            {isEnabled ? formatLastUpdate(lastUpdate?.crypto) : 'Manual'}
-          </span>
-        </div>
-
-        <div style={styles.sourceGroup}>
-          <span style={styles.sourceLabel}>Macro:</span>
-          <span style={styles.sourceValue}>
-            {isEnabled && fredApiKey
-              ? formatLastUpdate(lastUpdate?.macro)
-              : fredApiKey
-              ? 'Manual'
-              : 'No API key'}
-          </span>
-        </div>
-
-        {isEnabled && (
-          <button
-            style={{
-              ...styles.refreshBtn,
-              ...(isFetching ? styles.refreshBtnDisabled : {}),
-            }}
-            onClick={onRefresh}
-            disabled={isFetching}
+            onClick={() => onToggleEnabled(!isEnabled)}
+            title={isEnabled ? 'Disable live data' : 'Enable live data'}
           >
-            {isFetching ? 'Fetching...' : 'Refresh Now'}
-          </button>
-        )}
+            <div
+              style={{
+                ...styles.toggleThumb,
+                ...(isEnabled ? styles.toggleThumbActive : {}),
+              }}
+            />
+          </div>
+        </div>
       </div>
 
       {hasErrors && (
@@ -243,54 +209,9 @@ export function DataStatus({
         </div>
       )}
 
-      {showSettings && (
-        <div style={styles.settingsPanel}>
-          <div style={styles.settingsRow}>
-            <span style={styles.settingsLabel}>Auto-fetch:</span>
-            <div
-              style={{
-                ...styles.toggle,
-                ...(isEnabled ? styles.toggleActive : {}),
-              }}
-              onClick={() => onToggleEnabled(!isEnabled)}
-            >
-              <div
-                style={{
-                  ...styles.toggleThumb,
-                  ...(isEnabled ? styles.toggleThumbActive : {}),
-                }}
-              />
-            </div>
-            <span style={{ ...styles.sourceValue, marginLeft: 8 }}>
-              {isEnabled ? 'ON' : 'OFF'}
-            </span>
-          </div>
-
-          <div style={styles.settingsRow}>
-            <span style={styles.settingsLabel}>FRED API Key:</span>
-            <input
-              type="password"
-              style={styles.input}
-              value={tempApiKey}
-              onChange={(e) => setTempApiKey(e.target.value)}
-              onBlur={handleApiKeySubmit}
-              onKeyDown={handleApiKeyKeyDown}
-              placeholder="Enter your FRED API key"
-            />
-          </div>
-
-          <div style={styles.hint}>
-            Get a free FRED API key at{' '}
-            <a
-              href="https://fred.stlouisfed.org/docs/api/api_key.html"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={styles.link}
-            >
-              fred.stlouisfed.org
-            </a>
-            . BTC & Gold prices work without a key (via CoinGecko).
-          </div>
+      {!hasFredKey && (
+        <div style={styles.hint}>
+          Macro data requires VITE_FRED_API_KEY in .env file
         </div>
       )}
     </div>
