@@ -1,0 +1,106 @@
+/**
+ * ITC Risk Cascade Monitor - Design Tokens
+ * Dark terminal / Bloomberg terminal inspired palette
+ */
+
+:root {
+  /* Signal colors */
+  --color-green: #5DCAA5;
+  --color-blue: #378ADD;
+  --color-amber: #EF9F27;
+  --color-red: #E24B4A;
+  --color-gray: #888780;
+  --color-magenta: #D4537E;
+
+  /* Signal colors with alpha for backgrounds */
+  --color-green-10: rgba(93, 202, 165, 0.1);
+  --color-green-15: rgba(93, 202, 165, 0.15);
+  --color-green-20: rgba(93, 202, 165, 0.2);
+  --color-blue-10: rgba(55, 138, 221, 0.1);
+  --color-blue-15: rgba(55, 138, 221, 0.15);
+  --color-blue-20: rgba(55, 138, 221, 0.2);
+  --color-amber-10: rgba(239, 159, 39, 0.1);
+  --color-amber-15: rgba(239, 159, 39, 0.15);
+  --color-amber-20: rgba(239, 159, 39, 0.2);
+  --color-red-10: rgba(226, 75, 74, 0.1);
+  --color-red-15: rgba(226, 75, 74, 0.15);
+  --color-red-20: rgba(226, 75, 74, 0.2);
+  --color-gray-10: rgba(136, 135, 128, 0.1);
+  --color-magenta-10: rgba(212, 83, 126, 0.1);
+
+  /* Text colors */
+  --text-primary: #E8E6DF;
+  --text-secondary: #B4B2A9;
+  --text-muted: #888780;
+  --text-dim: #5F5E5A;
+  --text-subtle: #444441;
+
+  /* Background colors */
+  --bg-base: #0D0D0F;
+  --bg-card: rgba(255, 255, 255, 0.02);
+  --bg-card-hover: rgba(255, 255, 255, 0.03);
+  --bg-card-active: rgba(255, 255, 255, 0.04);
+  --bg-input: rgba(255, 255, 255, 0.08);
+  --bg-highlight: rgba(255, 255, 255, 0.06);
+
+  /* Border colors */
+  --border-default: rgba(255, 255, 255, 0.06);
+  --border-subtle: rgba(255, 255, 255, 0.04);
+  --border-focus: var(--color-blue);
+
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Border radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+  --radius-full: 50%;
+
+  /* Typography */
+  --font-sans: 'IBM Plex Sans', 'SF Pro', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+
+  /* Font sizes */
+  --text-xs: 9px;
+  --text-sm: 10px;
+  --text-base: 11px;
+  --text-md: 12px;
+  --text-lg: 14px;
+  --text-xl: 16px;
+  --text-2xl: 18px;
+  --text-3xl: 22px;
+  --text-4xl: 28px;
+
+  /* Font weights */
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* Line heights */
+  --leading-tight: 1.2;
+  --leading-normal: 1.4;
+  --leading-relaxed: 1.5;
+
+  /* Letter spacing */
+  --tracking-tight: -0.02em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.03em;
+  --tracking-wider: 0.05em;
+
+  /* Transitions */
+  --transition-fast: 100ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  /* Shadows (minimal for dark theme) */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
