@@ -42,9 +42,51 @@ async function fetchFredSeries(seriesId, apiKey, startDate = '1960-01-01') {
     }));
 }
 
-// Fetch SPX from Yahoo Finance (has much longer history than FRED's 10-year limit)
+// Fetch SPX from Stooq (free, historical data back to 1927)
+async function fetchSPXFromStooq() {
+  const startDate = '19600101';
+  const today = new Date();
+  const endDate = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
+
+  // Stooq CSV download - monthly data
+  const url = `https://stooq.com/q/d/l/?s=%5Espx&d1=${startDate}&d2=${endDate}&i=m`;
+
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Stooq error: ${response.status}`);
+  }
+
+  const csvText = await response.text();
+  const lines = csvText.trim().split('\n');
+
+  // Skip header row (Date,Open,High,Low,Close,Volume)
+  const observations = [];
+  for (let i = 1; i < lines.length; i++) {
+    const parts = lines[i].split(',');
+    if (parts.length >= 5) {
+      const dateStr = parts[0]; // Format: YYYY-MM-DD
+      const close = parseFloat(parts[4]);
+      if (dateStr && !isNaN(close)) {
+        // Normalize to first of month
+        const [year, month] = dateStr.split('-');
+        observations.push({
+          date: `${year}-${month}-01`,
+          value: close,
+        });
+      }
+    }
+  }
+
+  return observations;
+}
+
+// Fallback: Fetch SPX from Yahoo Finance
 async function fetchSPXFromYahoo() {
-  // Start from 1960 (Unix timestamp)
   const startTimestamp = -315619200; // Jan 1, 1960
   const endTimestamp = Math.floor(Date.now() / 1000);
 
@@ -52,8 +94,7 @@ async function fetchSPXFromYahoo() {
 
   const response = await fetch(url, {
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     },
   });
 
@@ -70,10 +111,28 @@ async function fetchSPXFromYahoo() {
 
   return timestamps.map((ts, i) => {
     const date = new Date(ts * 1000);
-    // Normalize to first of month for alignment (YYYY-MM-01)
     const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
     return { date: dateStr, value: closes[i] };
   }).filter(obs => obs.value != null && !isNaN(obs.value));
+}
+
+// Try multiple sources for SPX data
+async function fetchSPX() {
+  // Try Stooq first (has more historical data)
+  try {
+    const data = await fetchSPXFromStooq();
+    if (data.length > 100) {
+      console.log(`Got ${data.length} months of SPX data from Stooq`);
+      return data;
+    }
+  } catch (e) {
+    console.warn('Stooq failed, trying Yahoo Finance:', e.message);
+  }
+
+  // Fall back to Yahoo Finance
+  const data = await fetchSPXFromYahoo();
+  console.log(`Got ${data.length} months of SPX data from Yahoo Finance`);
+  return data;
 }
 
 // Calculate YoY inflation from CPI
@@ -94,7 +153,6 @@ function calculateYoYInflation(cpiData) {
 function toDateMap(observations) {
   const map = new Map();
   for (const obs of observations) {
-    // Normalize to YYYY-MM format for monthly alignment
     const monthKey = obs.date.substring(0, 7);
     map.set(monthKey, obs.value);
   }
@@ -132,7 +190,6 @@ function normalizeForOverlay(values, metricValues) {
 }
 
 export default async function handler(req, res) {
-  // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET');
 
@@ -147,13 +204,12 @@ export default async function handler(req, res) {
 
   try {
     // Fetch all data in parallel
-    // Using Yahoo Finance for SPX (FRED only has 10 years due to licensing)
     const [unrate, fedfunds, cpi, m2, spx] = await Promise.all([
       fetchFredSeries('UNRATE', apiKey),
       fetchFredSeries('FEDFUNDS', apiKey),
       fetchFredSeries('CPIAUCSL', apiKey),
       fetchFredSeries('M2SL', apiKey),
-      fetchSPXFromYahoo(),
+      fetchSPX(),
     ]);
 
     // Calculate YoY inflation from CPI
@@ -226,6 +282,7 @@ export default async function handler(req, res) {
       count: observations.length,
       observations,
       recessions: RECESSIONS,
+      dataSource: spx.length > 400 ? 'stooq' : 'yahoo',
       timestamp: Date.now(),
     });
   } catch (error) {
