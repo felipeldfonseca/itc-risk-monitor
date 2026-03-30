@@ -42,13 +42,15 @@ async function fetchFredSeries(seriesId, apiKey, startDate = '1960-01-01') {
     }));
 }
 
-// Fetch SPX using Yahoo Finance v7 download API (CSV) - might have more history
+// Fetch SPX using Yahoo Finance v7 download API (CSV) with DAILY data
+// Daily data goes back to 1950, monthly only goes to 1984
 async function fetchSPXFromYahooCSV() {
   // Try to get data from 1960
   const startTimestamp = -315619200; // Jan 1, 1960
   const endTimestamp = Math.floor(Date.now() / 1000);
 
-  const url = `https://query1.finance.yahoo.com/v7/finance/download/%5EGSPC?period1=${startTimestamp}&period2=${endTimestamp}&interval=1mo&events=history`;
+  // Use daily interval - it has much more historical data than monthly
+  const url = `https://query1.finance.yahoo.com/v7/finance/download/%5EGSPC?period1=${startTimestamp}&period2=${endTimestamp}&interval=1d&events=history`;
 
   const response = await fetch(url, {
     headers: {
@@ -65,7 +67,9 @@ async function fetchSPXFromYahooCSV() {
   const lines = csvText.trim().split('\n');
 
   // Parse CSV: Date,Open,High,Low,Close,Adj Close,Volume
-  const observations = [];
+  // Group by month and calculate monthly average
+  const monthlyData = new Map();
+
   for (let i = 1; i < lines.length; i++) {
     const parts = lines[i].split(',');
     if (parts.length >= 5) {
@@ -73,23 +77,41 @@ async function fetchSPXFromYahooCSV() {
       const close = parseFloat(parts[4]);
       if (dateStr && !isNaN(close) && close > 0) {
         const [year, month] = dateStr.split('-');
-        observations.push({
-          date: `${year}-${month}-01`,
-          value: close,
-        });
+        const monthKey = `${year}-${month}`;
+
+        if (!monthlyData.has(monthKey)) {
+          monthlyData.set(monthKey, { sum: 0, count: 0, lastClose: close });
+        }
+        const data = monthlyData.get(monthKey);
+        data.sum += close;
+        data.count++;
+        data.lastClose = close; // Keep last close of month
       }
     }
   }
 
+  // Convert to array with month-end close values
+  const observations = [];
+  for (const [monthKey, data] of monthlyData) {
+    observations.push({
+      date: `${monthKey}-01`,
+      value: data.lastClose, // Use last close of month (more accurate for monthly data)
+    });
+  }
+
+  // Sort by date
+  observations.sort((a, b) => a.date.localeCompare(b.date));
+
   return observations;
 }
 
-// Fetch SPX using Yahoo Finance v8 chart API
+// Fetch SPX using Yahoo Finance v8 chart API with DAILY data
 async function fetchSPXFromYahooChart() {
   const startTimestamp = -315619200; // Jan 1, 1960
   const endTimestamp = Math.floor(Date.now() / 1000);
 
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1=${startTimestamp}&period2=${endTimestamp}&interval=1mo&events=history`;
+  // Use daily interval for more historical data
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1=${startTimestamp}&period2=${endTimestamp}&interval=1d&events=history`;
 
   const response = await fetch(url, {
     headers: {
@@ -108,11 +130,29 @@ async function fetchSPXFromYahooChart() {
   const timestamps = result.timestamp || [];
   const closes = result.indicators?.quote?.[0]?.close || [];
 
-  return timestamps.map((ts, i) => {
+  // Group by month and get last close of each month
+  const monthlyData = new Map();
+
+  for (let i = 0; i < timestamps.length; i++) {
+    const ts = timestamps[i];
+    const close = closes[i];
+    if (close == null || isNaN(close) || close <= 0) continue;
+
     const date = new Date(ts * 1000);
-    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
-    return { date: dateStr, value: closes[i] };
-  }).filter(obs => obs.value != null && !isNaN(obs.value) && obs.value > 0);
+    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
+    // Always update with latest close in month
+    monthlyData.set(monthKey, close);
+  }
+
+  // Convert to sorted array
+  const observations = [];
+  for (const [monthKey, value] of monthlyData) {
+    observations.push({ date: `${monthKey}-01`, value });
+  }
+  observations.sort((a, b) => a.date.localeCompare(b.date));
+
+  return observations;
 }
 
 // Try multiple sources for SPX data
