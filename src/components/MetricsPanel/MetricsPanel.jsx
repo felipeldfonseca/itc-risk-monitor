@@ -5,22 +5,13 @@ import { formatNumber, formatPercent } from '../../lib/formatters';
  * MetricsPanel - Grid of 4 key editable metrics
  */
 
-const styles = {
-  grid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-    gap: 'var(--space-2)',
-    marginBottom: 'var(--space-5)',
-  },
-};
-
 export function MetricsPanel({
   metrics,
   signals,
   onMetricChange,
 }) {
   return (
-    <div style={styles.grid}>
+    <div className="grid-4" style={{ marginBottom: 'var(--space-5)' }}>
       <MetricCard
         label="Initial Claims"
         value={metrics.initialClaims}

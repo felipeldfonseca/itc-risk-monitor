@@ -6,7 +6,8 @@ import { STAGES, STATUS_LABELS, STATUS_STYLES } from './stages';
 
 const styles = {
   container: {
-    display: 'flex',
+    display: 'grid',
+    gridTemplateColumns: 'repeat(5, 1fr)',
     gap: 2,
     marginBottom: 'var(--space-5)',
   },
@@ -87,7 +88,7 @@ function StageCard({ stage }) {
 
 export function CascadeTracker() {
   return (
-    <div style={styles.container}>
+    <div className="grid-5" style={{ marginBottom: 'var(--space-5)' }}>
       {STAGES.map((stage) => (
         <StageCard key={stage.id} stage={stage} />
       ))}
