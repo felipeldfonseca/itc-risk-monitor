@@ -4,9 +4,6 @@ import { fetchCryptoPrices, fetchMarketData, fetchMacroData } from '../lib/api';
 // Storage key for API settings
 const API_SETTINGS_KEY = 'itc-monitor-api-settings';
 
-// FRED API key from environment variable
-const FRED_API_KEY = import.meta.env.VITE_FRED_API_KEY || '';
-
 // Default refresh intervals (in milliseconds)
 const REFRESH_INTERVALS = {
   crypto: 60000,      // 1 minute for crypto prices
@@ -44,7 +41,7 @@ function saveApiSettings(settings) {
 
 /**
  * Custom hook for auto-fetching live data
- * FRED API key is read from VITE_FRED_API_KEY environment variable
+ * FRED API calls go through serverless proxy (no client-side API key needed)
  */
 export function useAutoFetch(onDataUpdate) {
   // API settings state (only enabled toggle is stored)
@@ -64,9 +61,6 @@ export function useAutoFetch(onDataUpdate) {
   // Refs for interval management
   const cryptoIntervalRef = useRef(null);
   const macroIntervalRef = useRef(null);
-
-  // Check if FRED API key is available
-  const hasFredKey = Boolean(FRED_API_KEY);
 
   /**
    * Fetch crypto prices (BTC, Gold via PAXG)
@@ -107,14 +101,14 @@ export function useAutoFetch(onDataUpdate) {
   }, [isEnabled, onDataUpdate]);
 
   /**
-   * Fetch macro data from FRED
+   * Fetch macro data from FRED (via serverless proxy)
    */
   const fetchMacro = useCallback(async () => {
-    if (!isEnabled || !FRED_API_KEY) return;
+    if (!isEnabled) return;
 
     setIsFetching(true);
     try {
-      const data = await fetchMacroData(FRED_API_KEY);
+      const data = await fetchMacroData();
 
       if (data.error) {
         setErrors((prev) => ({ ...prev, macro: data.error }));
@@ -174,16 +168,11 @@ export function useAutoFetch(onDataUpdate) {
 
     // Initial fetch
     fetchCrypto();
-    if (FRED_API_KEY) {
-      fetchMacro();
-    }
+    fetchMacro();
 
     // Set up intervals
     cryptoIntervalRef.current = setInterval(fetchCrypto, REFRESH_INTERVALS.crypto);
-
-    if (FRED_API_KEY) {
-      macroIntervalRef.current = setInterval(fetchMacro, REFRESH_INTERVALS.macro);
-    }
+    macroIntervalRef.current = setInterval(fetchMacro, REFRESH_INTERVALS.macro);
 
     return () => {
       if (cryptoIntervalRef.current) {
@@ -198,7 +187,6 @@ export function useAutoFetch(onDataUpdate) {
   return {
     // Settings
     isEnabled,
-    hasFredKey,
     toggleEnabled,
 
     // Status

@@ -1,11 +1,10 @@
 /**
  * ITC Risk Cascade Monitor - API Service Layer
- * Fetches live data from various free APIs
+ * Fetches live data from various APIs
  */
 
 // API endpoints
 const COINGECKO_API = 'https://api.coingecko.com/api/v3';
-const FRED_API = 'https://api.stlouisfed.org/fred/series/observations';
 
 // FRED series IDs
 const FRED_SERIES = {
@@ -45,15 +44,11 @@ export async function fetchCryptoPrices() {
 }
 
 /**
- * Fetch S&P 500 price from CoinGecko (via SPY tracking)
- * Note: CoinGecko doesn't have SPX directly, we'll use an alternative
+ * Fetch market data from CoinGecko
  */
 export async function fetchMarketData() {
   try {
-    // Using Fear & Greed index endpoint for market sentiment
-    const response = await fetch(
-      `${COINGECKO_API}/global`
-    );
+    const response = await fetch(`${COINGECKO_API}/global`);
 
     if (!response.ok) {
       throw new Error(`CoinGecko API error: ${response.status}`);
@@ -74,42 +69,26 @@ export async function fetchMarketData() {
 }
 
 /**
- * Fetch data from FRED API (requires API key)
+ * Fetch data from FRED via our serverless proxy (bypasses CORS)
  * @param {string} seriesId - FRED series ID
- * @param {string} apiKey - FRED API key
  */
-export async function fetchFredSeries(seriesId, apiKey) {
-  if (!apiKey) {
-    return { error: 'FRED API key required' };
-  }
-
+export async function fetchFredSeries(seriesId) {
   try {
-    const params = new URLSearchParams({
-      series_id: seriesId,
-      api_key: apiKey,
-      file_type: 'json',
-      sort_order: 'desc',
-      limit: '1',
-    });
-
-    const response = await fetch(`${FRED_API}?${params}`);
+    // Use our Vercel serverless function as proxy
+    const response = await fetch(`/api/fred?series=${seriesId}`);
 
     if (!response.ok) {
-      throw new Error(`FRED API error: ${response.status}`);
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `API error: ${response.status}`);
     }
 
     const data = await response.json();
-    const observation = data.observations?.[0];
-
-    if (!observation) {
-      return { error: 'No data available' };
-    }
 
     return {
-      value: parseFloat(observation.value),
-      date: observation.date,
+      value: data.value,
+      date: data.date,
       source: 'fred',
-      timestamp: Date.now(),
+      timestamp: data.timestamp,
     };
   } catch (error) {
     console.error(`Failed to fetch FRED series ${seriesId}:`, error);
@@ -118,25 +97,29 @@ export async function fetchFredSeries(seriesId, apiKey) {
 }
 
 /**
- * Fetch all FRED macro data
- * @param {string} apiKey - FRED API key
+ * Fetch all FRED macro data via proxy
  */
-export async function fetchMacroData(apiKey) {
-  if (!apiKey) {
-    return { error: 'FRED API key required' };
-  }
-
+export async function fetchMacroData() {
   const results = await Promise.all([
-    fetchFredSeries(FRED_SERIES.initialClaims, apiKey),
-    fetchFredSeries(FRED_SERIES.unemployment, apiKey),
-    fetchFredSeries(FRED_SERIES.fedFunds, apiKey),
-    fetchFredSeries(FRED_SERIES.dxy, apiKey),
+    fetchFredSeries(FRED_SERIES.initialClaims),
+    fetchFredSeries(FRED_SERIES.unemployment),
+    fetchFredSeries(FRED_SERIES.fedFunds),
+    fetchFredSeries(FRED_SERIES.dxy),
   ]);
 
   const [claims, unemployment, fedFunds, dxy] = results;
 
+  // Check if all failed (likely API key issue)
+  const allFailed = results.every(r => r.error);
+  if (allFailed) {
+    return {
+      error: claims.error || 'Failed to fetch macro data',
+      timestamp: Date.now(),
+    };
+  }
+
   return {
-    // Initial claims comes in thousands, convert to K format
+    // Initial claims comes in raw numbers, convert to K format
     initialClaims: claims.value ? claims.value / 1000 : null,
     initialClaimsDate: claims.date,
     unemployment: unemployment.value,
@@ -157,40 +140,15 @@ export async function fetchMacroData(apiKey) {
 }
 
 /**
- * Fetch SPX from Yahoo Finance via a CORS proxy (alternative)
- * Note: This may not work in all environments due to CORS
- */
-export async function fetchSPX() {
-  try {
-    // Using a public API that provides S&P 500 data
-    // Alpha Vantage free tier or similar
-    // For now, return null - user can input manually or we add server-side proxy
-    return {
-      spx: null,
-      error: 'SPX auto-fetch requires server-side proxy (coming soon)',
-      source: 'manual',
-      timestamp: Date.now(),
-    };
-  } catch (error) {
-    return { error: error.message };
-  }
-}
-
-/**
  * Fetch all available data
- * @param {Object} options - { fredApiKey }
  */
-export async function fetchAllData(options = {}) {
-  const { fredApiKey } = options;
-
+export async function fetchAllData() {
   // Fetch crypto data (always available)
   const cryptoPromise = fetchCryptoPrices();
   const marketPromise = fetchMarketData();
 
-  // Fetch FRED data if API key provided
-  const macroPromise = fredApiKey
-    ? fetchMacroData(fredApiKey)
-    : Promise.resolve({ error: 'No FRED API key' });
+  // Fetch FRED data via proxy
+  const macroPromise = fetchMacroData();
 
   const [crypto, market, macro] = await Promise.all([
     cryptoPromise,

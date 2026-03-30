@@ -32,7 +32,6 @@ function App() {
   // Auto-fetch hook - updates metrics when new data arrives
   const {
     isEnabled,
-    hasFredKey,
     isFetching,
     lastUpdate,
     errors,
@@ -54,7 +53,6 @@ function App() {
         {/* Data Status Bar */}
         <DataStatus
           isEnabled={isEnabled}
-          hasFredKey={hasFredKey}
           isFetching={isFetching}
           lastUpdate={lastUpdate}
           errors={errors}

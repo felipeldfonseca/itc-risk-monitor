@@ -1,9 +1,8 @@
-import { useState } from 'react';
 import { formatLastUpdate } from '../../lib/api';
 
 /**
  * DataStatus - Shows live data status and toggle
- * FRED API key is configured via VITE_FRED_API_KEY environment variable
+ * FRED API requests go through serverless proxy (no client config needed)
  */
 
 const styles = {
@@ -114,16 +113,10 @@ const styles = {
     color: 'var(--color-red)',
     marginTop: 'var(--space-2)',
   },
-  hint: {
-    fontSize: 'var(--text-xs)',
-    color: 'var(--text-dim)',
-    marginTop: 'var(--space-2)',
-  },
 };
 
 export function DataStatus({
   isEnabled,
-  hasFredKey,
   isFetching,
   lastUpdate,
   errors,
@@ -161,11 +154,7 @@ export function DataStatus({
           <div style={styles.sourceGroup}>
             <span style={styles.sourceLabel}>Macro:</span>
             <span style={styles.sourceValue}>
-              {isEnabled && hasFredKey
-                ? formatLastUpdate(lastUpdate?.macro)
-                : hasFredKey
-                ? 'Manual'
-                : 'No env key'}
+              {isEnabled ? formatLastUpdate(lastUpdate?.macro) : 'Manual'}
             </span>
           </div>
         </div>
@@ -206,12 +195,6 @@ export function DataStatus({
         <div style={styles.errorText}>
           {errors.crypto && `Crypto: ${errors.crypto}. `}
           {errors.macro && `Macro: ${errors.macro}`}
-        </div>
-      )}
-
-      {!hasFredKey && (
-        <div style={styles.hint}>
-          Macro data requires VITE_FRED_API_KEY in .env file
         </div>
       )}
     </div>
