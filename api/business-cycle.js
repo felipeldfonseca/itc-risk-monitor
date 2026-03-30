@@ -42,37 +42,36 @@ async function fetchFredSeries(seriesId, apiKey, startDate = '1960-01-01') {
     }));
 }
 
-// Fetch SPX from Stooq (free, historical data back to 1927)
-async function fetchSPXFromStooq() {
-  const startDate = '19600101';
-  const today = new Date();
-  const endDate = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
+// Fetch SPX using Yahoo Finance v7 download API (CSV) - might have more history
+async function fetchSPXFromYahooCSV() {
+  // Try to get data from 1960
+  const startTimestamp = -315619200; // Jan 1, 1960
+  const endTimestamp = Math.floor(Date.now() / 1000);
 
-  // Stooq CSV download - monthly data
-  const url = `https://stooq.com/q/d/l/?s=%5Espx&d1=${startDate}&d2=${endDate}&i=m`;
+  const url = `https://query1.finance.yahoo.com/v7/finance/download/%5EGSPC?period1=${startTimestamp}&period2=${endTimestamp}&interval=1mo&events=history`;
 
   const response = await fetch(url, {
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'text/csv,application/csv,*/*',
     },
   });
 
   if (!response.ok) {
-    throw new Error(`Stooq error: ${response.status}`);
+    throw new Error(`Yahoo Finance CSV error: ${response.status}`);
   }
 
   const csvText = await response.text();
   const lines = csvText.trim().split('\n');
 
-  // Skip header row (Date,Open,High,Low,Close,Volume)
+  // Parse CSV: Date,Open,High,Low,Close,Adj Close,Volume
   const observations = [];
   for (let i = 1; i < lines.length; i++) {
     const parts = lines[i].split(',');
     if (parts.length >= 5) {
-      const dateStr = parts[0]; // Format: YYYY-MM-DD
+      const dateStr = parts[0]; // YYYY-MM-DD
       const close = parseFloat(parts[4]);
-      if (dateStr && !isNaN(close)) {
-        // Normalize to first of month
+      if (dateStr && !isNaN(close) && close > 0) {
         const [year, month] = dateStr.split('-');
         observations.push({
           date: `${year}-${month}-01`,
@@ -85,8 +84,8 @@ async function fetchSPXFromStooq() {
   return observations;
 }
 
-// Fallback: Fetch SPX from Yahoo Finance
-async function fetchSPXFromYahoo() {
+// Fetch SPX using Yahoo Finance v8 chart API
+async function fetchSPXFromYahooChart() {
   const startTimestamp = -315619200; // Jan 1, 1960
   const endTimestamp = Math.floor(Date.now() / 1000);
 
@@ -99,12 +98,12 @@ async function fetchSPXFromYahoo() {
   });
 
   if (!response.ok) {
-    throw new Error(`Yahoo Finance error: ${response.status}`);
+    throw new Error(`Yahoo Finance Chart error: ${response.status}`);
   }
 
   const data = await response.json();
   const result = data.chart?.result?.[0];
-  if (!result) throw new Error('No SPX data from Yahoo Finance');
+  if (!result) throw new Error('No SPX data from Yahoo Finance Chart API');
 
   const timestamps = result.timestamp || [];
   const closes = result.indicators?.quote?.[0]?.close || [];
@@ -113,26 +112,34 @@ async function fetchSPXFromYahoo() {
     const date = new Date(ts * 1000);
     const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
     return { date: dateStr, value: closes[i] };
-  }).filter(obs => obs.value != null && !isNaN(obs.value));
+  }).filter(obs => obs.value != null && !isNaN(obs.value) && obs.value > 0);
 }
 
 // Try multiple sources for SPX data
 async function fetchSPX() {
-  // Try Stooq first (has more historical data)
+  let source = 'unknown';
+  let data = [];
+
+  // Try Yahoo Finance CSV download first
   try {
-    const data = await fetchSPXFromStooq();
+    data = await fetchSPXFromYahooCSV();
+    source = 'yahoo-csv';
     if (data.length > 100) {
-      console.log(`Got ${data.length} months of SPX data from Stooq`);
-      return data;
+      return { data, source, firstDate: data[0]?.date, lastDate: data[data.length - 1]?.date };
     }
   } catch (e) {
-    console.warn('Stooq failed, trying Yahoo Finance:', e.message);
+    console.warn('Yahoo CSV failed:', e.message);
   }
 
-  // Fall back to Yahoo Finance
-  const data = await fetchSPXFromYahoo();
-  console.log(`Got ${data.length} months of SPX data from Yahoo Finance`);
-  return data;
+  // Fall back to Yahoo Finance Chart API
+  try {
+    data = await fetchSPXFromYahooChart();
+    source = 'yahoo-chart';
+    return { data, source, firstDate: data[0]?.date, lastDate: data[data.length - 1]?.date };
+  } catch (e) {
+    console.warn('Yahoo Chart API failed:', e.message);
+    throw new Error('All SPX data sources failed');
+  }
 }
 
 // Calculate YoY inflation from CPI
@@ -204,13 +211,15 @@ export default async function handler(req, res) {
 
   try {
     // Fetch all data in parallel
-    const [unrate, fedfunds, cpi, m2, spx] = await Promise.all([
+    const [unrate, fedfunds, cpi, m2, spxResult] = await Promise.all([
       fetchFredSeries('UNRATE', apiKey),
       fetchFredSeries('FEDFUNDS', apiKey),
       fetchFredSeries('CPIAUCSL', apiKey),
       fetchFredSeries('M2SL', apiKey),
       fetchSPX(),
     ]);
+
+    const spx = spxResult.data;
 
     // Calculate YoY inflation from CPI
     const inflation = calculateYoYInflation(cpi);
@@ -222,6 +231,16 @@ export default async function handler(req, res) {
     const m2Map = toDateMap(m2);
     const spxMap = toDateMap(spx);
 
+    // Debug: find earliest dates for each series
+    const debugInfo = {
+      spx: { count: spx.length, first: spx[0]?.date, last: spx[spx.length - 1]?.date, source: spxResult.source },
+      unrate: { count: unrate.length, first: unrate[0]?.date },
+      fedfunds: { count: fedfunds.length, first: fedfunds[0]?.date },
+      cpi: { count: cpi.length, first: cpi[0]?.date },
+      inflation: { count: inflation.length, first: inflation[0]?.date },
+      m2: { count: m2.length, first: m2[0]?.date },
+    };
+
     // Get all unique months where we have SPX data
     const months = [...spxMap.keys()].sort();
 
@@ -229,6 +248,7 @@ export default async function handler(req, res) {
     const observations = [];
     const spxValues = [];
     const metricValues = [];
+    let skippedReasons = { noUnrate: 0, noFedfunds: 0, noInflation: 0, noM2: 0, zeroUnrate: 0, notFinite: 0 };
 
     for (const month of months) {
       const spxVal = spxMap.get(month);
@@ -237,34 +257,32 @@ export default async function handler(req, res) {
       const inflationVal = getValueForMonth(inflationMap, month);
       const m2Val = getValueForMonth(m2Map, month);
 
-      // Skip if any value is missing or invalid
-      if (!spxVal || !unrateVal || fedfundsVal == null || inflationVal == null || !m2Val) {
-        continue;
-      }
-
-      // Skip if unemployment is 0 (would cause division by zero)
-      if (unrateVal === 0) continue;
+      // Track why we skip months
+      if (!unrateVal) { skippedReasons.noUnrate++; continue; }
+      if (fedfundsVal == null) { skippedReasons.noFedfunds++; continue; }
+      if (inflationVal == null) { skippedReasons.noInflation++; continue; }
+      if (!m2Val) { skippedReasons.noM2++; continue; }
+      if (unrateVal === 0) { skippedReasons.zeroUnrate++; continue; }
 
       // Business Cycle Metric = (SPX / UNRATE²) × USINTR × USIRYY / M2
       const metric = (spxVal / (unrateVal * unrateVal)) * fedfundsVal * inflationVal / m2Val;
 
-      // Only include finite values
-      if (isFinite(metric)) {
-        observations.push({
-          date: `${month}-01`,
-          value: metric,
+      if (!isFinite(metric)) { skippedReasons.notFinite++; continue; }
+
+      observations.push({
+        date: `${month}-01`,
+        value: metric,
+        spx: spxVal,
+        components: {
           spx: spxVal,
-          components: {
-            spx: spxVal,
-            unrate: unrateVal,
-            fedfunds: fedfundsVal,
-            inflation: inflationVal,
-            m2: m2Val,
-          },
-        });
-        spxValues.push(spxVal);
-        metricValues.push(metric);
-      }
+          unrate: unrateVal,
+          fedfunds: fedfundsVal,
+          inflation: inflationVal,
+          m2: m2Val,
+        },
+      });
+      spxValues.push(spxVal);
+      metricValues.push(metric);
     }
 
     // Normalize SPX values for overlay
@@ -282,7 +300,8 @@ export default async function handler(req, res) {
       count: observations.length,
       observations,
       recessions: RECESSIONS,
-      dataSource: spx.length > 400 ? 'stooq' : 'yahoo',
+      debug: debugInfo,
+      skippedReasons,
       timestamp: Date.now(),
     });
   } catch (error) {
