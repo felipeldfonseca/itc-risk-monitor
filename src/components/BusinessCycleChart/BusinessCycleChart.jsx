@@ -1,18 +1,22 @@
 import { useState, useEffect } from 'react';
 import {
-  LineChart,
+  ComposedChart,
   Line,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
   ReferenceLine,
+  ReferenceArea,
+  Legend,
 } from 'recharts';
 
 /**
  * BusinessCycleChart - Displays Ben Cowen's Business Cycle Metric
  * Formula: (SPX / UNRATE²) × USINTR × USIRYY / M2
+ * With recession bands and SPX overlay
  */
 
 const styles = {
@@ -27,6 +31,8 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 'var(--space-3)',
+    flexWrap: 'wrap',
+    gap: 'var(--space-2)',
   },
   title: {
     fontSize: 'var(--text-md)',
@@ -41,14 +47,14 @@ const styles = {
     fontFamily: 'var(--font-mono)',
   },
   chartContainer: {
-    height: 350,
+    height: 400,
     marginTop: 'var(--space-3)',
   },
   loading: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    height: 350,
+    height: 400,
     color: 'var(--text-dim)',
     fontSize: 'var(--text-sm)',
   },
@@ -56,7 +62,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    height: 350,
+    height: 400,
     color: 'var(--color-red)',
     fontSize: 'var(--text-sm)',
   },
@@ -69,18 +75,26 @@ const styles = {
     borderTop: '1px solid var(--border-subtle)',
     fontSize: 'var(--text-xs)',
     color: 'var(--text-dim)',
+    flexWrap: 'wrap',
+    gap: 'var(--space-2)',
   },
-  recessionLabel: {
+  legendItem: {
     display: 'inline-flex',
     alignItems: 'center',
     gap: 'var(--space-1)',
+    marginRight: 'var(--space-3)',
   },
-  recessionDot: {
-    width: 8,
-    height: 8,
-    borderRadius: '50%',
-    background: 'rgba(239, 68, 68, 0.3)',
-    border: '1px solid rgba(239, 68, 68, 0.5)',
+  legendDot: {
+    width: 12,
+    height: 3,
+    borderRadius: 2,
+  },
+  recessionBox: {
+    width: 12,
+    height: 12,
+    borderRadius: 2,
+    background: 'rgba(156, 163, 175, 0.3)',
+    border: '1px solid rgba(156, 163, 175, 0.5)',
   },
   currentValue: {
     fontFamily: 'var(--font-mono)',
@@ -88,22 +102,13 @@ const styles = {
   },
 };
 
-// Known US recession periods (approximate)
-const RECESSIONS = [
-  { start: '1973-11-01', end: '1975-03-01', label: '1973-75' },
-  { start: '1980-01-01', end: '1980-07-01', label: '1980' },
-  { start: '1981-07-01', end: '1982-11-01', label: '1981-82' },
-  { start: '1990-07-01', end: '1991-03-01', label: '1990-91' },
-  { start: '2001-03-01', end: '2001-11-01', label: '2001' },
-  { start: '2007-12-01', end: '2009-06-01', label: '2007-09' },
-  { start: '2020-02-01', end: '2020-04-01', label: '2020' },
-];
-
 // Custom tooltip component
 function CustomTooltip({ active, payload }) {
   if (!active || !payload || !payload.length) return null;
 
-  const data = payload[0].payload;
+  const data = payload[0]?.payload;
+  if (!data) return null;
+
   const date = new Date(data.date);
   const formattedDate = date.toLocaleDateString('en-US', {
     year: 'numeric',
@@ -118,28 +123,55 @@ function CustomTooltip({ active, payload }) {
         borderRadius: 'var(--radius-md)',
         padding: 'var(--space-2)',
         fontSize: 'var(--text-xs)',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
       }}
     >
       <div style={{ fontWeight: 'var(--weight-medium)', marginBottom: 4 }}>
         {formattedDate}
       </div>
-      <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-blue)' }}>
-        Value: {data.value?.toFixed(4) || 'N/A'}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div style={{ color: 'var(--color-blue)' }}>
+          Metric: {data.value?.toFixed(4) || 'N/A'}
+        </div>
+        <div style={{ color: 'var(--color-green)' }}>
+          S&P 500: {data.spx?.toLocaleString() || 'N/A'}
+        </div>
       </div>
       {data.components && (
-        <div style={{ marginTop: 4, color: 'var(--text-dim)' }}>
-          <div>SPX: {data.components.spx?.toFixed(0)}</div>
+        <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--border-subtle)', color: 'var(--text-dim)' }}>
           <div>UNRATE: {data.components.unrate?.toFixed(1)}%</div>
           <div>Fed Funds: {data.components.fedfunds?.toFixed(2)}%</div>
-          <div>Inflation: {data.components.inflation?.toFixed(2)}%</div>
+          <div>Inflation YoY: {data.components.inflation?.toFixed(2)}%</div>
+          <div>M2: ${(data.components.m2 / 1000).toFixed(1)}T</div>
         </div>
       )}
     </div>
   );
 }
 
+// Custom legend component
+function CustomLegend() {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', gap: 'var(--space-4)', marginTop: 'var(--space-2)' }}>
+      <div style={styles.legendItem}>
+        <div style={{ ...styles.legendDot, background: 'var(--color-blue)' }} />
+        <span>Business Cycle Metric</span>
+      </div>
+      <div style={styles.legendItem}>
+        <div style={{ ...styles.legendDot, background: 'var(--color-green)' }} />
+        <span>S&P 500 (normalized)</span>
+      </div>
+      <div style={styles.legendItem}>
+        <div style={styles.recessionBox} />
+        <span>Recession</span>
+      </div>
+    </div>
+  );
+}
+
 export function BusinessCycleChart() {
   const [data, setData] = useState([]);
+  const [recessions, setRecessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -157,6 +189,7 @@ export function BusinessCycleChart() {
 
         const result = await response.json();
         setData(result.observations || []);
+        setRecessions(result.recessions || []);
       } catch (err) {
         console.error('Failed to fetch business cycle data:', err);
         setError(err.message);
@@ -170,6 +203,8 @@ export function BusinessCycleChart() {
 
   // Get current (latest) value
   const currentValue = data.length > 0 ? data[data.length - 1]?.value : null;
+  const currentSpx = data.length > 0 ? data[data.length - 1]?.spx : null;
+  const dataStartDate = data.length > 0 ? data[0]?.date : null;
 
   // Format Y-axis ticks
   const formatYAxis = (value) => {
@@ -184,6 +219,12 @@ export function BusinessCycleChart() {
     return date.getFullYear().toString();
   };
 
+  // Filter recessions to only those within data range
+  const visibleRecessions = recessions.filter(r => {
+    if (!dataStartDate) return false;
+    return r.end >= dataStartDate;
+  });
+
   return (
     <div style={styles.container}>
       <div style={styles.header}>
@@ -193,17 +234,30 @@ export function BusinessCycleChart() {
 
       <div style={styles.chartContainer}>
         {loading ? (
-          <div style={styles.loading}>Loading historical data...</div>
+          <div style={styles.loading}>Loading historical data (this may take a moment)...</div>
         ) : error ? (
           <div style={styles.error}>Error: {error}</div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
               <CartesianGrid
                 strokeDasharray="3 3"
                 stroke="var(--border-subtle)"
                 vertical={false}
               />
+
+              {/* Recession bands */}
+              {visibleRecessions.map((recession, i) => (
+                <ReferenceArea
+                  key={i}
+                  x1={recession.start}
+                  x2={recession.end}
+                  fill="rgba(156, 163, 175, 0.25)"
+                  stroke="rgba(156, 163, 175, 0.4)"
+                  strokeWidth={1}
+                />
+              ))}
+
               <XAxis
                 dataKey="date"
                 tickFormatter={formatXAxis}
@@ -214,39 +268,58 @@ export function BusinessCycleChart() {
                 minTickGap={50}
               />
               <YAxis
+                yAxisId="left"
                 tickFormatter={formatYAxis}
                 tick={{ fontSize: 10, fill: 'var(--text-dim)' }}
                 axisLine={false}
                 tickLine={false}
                 width={50}
               />
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                hide={true}
+              />
               <Tooltip content={<CustomTooltip />} />
 
               {/* Zero reference line */}
-              <ReferenceLine y={0} stroke="var(--border-default)" />
+              <ReferenceLine yAxisId="left" y={0} stroke="var(--border-default)" />
 
-              {/* Main line */}
+              {/* SPX overlay (normalized to metric scale) */}
               <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="spxNormalized"
+                stroke="var(--color-green)"
+                strokeWidth={1}
+                dot={false}
+                opacity={0.6}
+              />
+
+              {/* Main business cycle metric line */}
+              <Line
+                yAxisId="left"
                 type="monotone"
                 dataKey="value"
                 stroke="var(--color-blue)"
-                strokeWidth={1.5}
+                strokeWidth={2}
                 dot={false}
                 activeDot={{ r: 4, fill: 'var(--color-blue)' }}
               />
-            </LineChart>
+            </ComposedChart>
           </ResponsiveContainer>
         )}
       </div>
 
+      <CustomLegend />
+
       <div style={styles.footer}>
-        <div style={styles.recessionLabel}>
-          <span style={styles.recessionDot} />
-          <span>Gray bars on TradingView indicate recession periods</span>
+        <div>
+          Data from {dataStartDate ? new Date(dataStartDate).getFullYear() : '—'} to present
         </div>
         {currentValue !== null && (
           <div style={styles.currentValue}>
-            Current: {currentValue.toFixed(4)}
+            Current: {currentValue.toFixed(4)} | SPX: {currentSpx?.toLocaleString()}
           </div>
         )}
       </div>

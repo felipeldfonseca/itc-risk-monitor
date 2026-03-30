@@ -6,8 +6,20 @@
 
 const FRED_API = 'https://api.stlouisfed.org/fred/series/observations';
 
+// US Recession periods (NBER official dates)
+const RECESSIONS = [
+  { start: '1969-12-01', end: '1970-11-01', label: '1969-70' },
+  { start: '1973-11-01', end: '1975-03-01', label: '1973-75' },
+  { start: '1980-01-01', end: '1980-07-01', label: '1980' },
+  { start: '1981-07-01', end: '1982-11-01', label: '1981-82' },
+  { start: '1990-07-01', end: '1991-03-01', label: '1990-91' },
+  { start: '2001-03-01', end: '2001-11-01', label: '2001' },
+  { start: '2007-12-01', end: '2009-06-01', label: '2007-09' },
+  { start: '2020-02-01', end: '2020-04-01', label: '2020' },
+];
+
 // Fetch FRED series with all observations
-async function fetchFredSeries(seriesId, apiKey, startDate = '1970-01-01') {
+async function fetchFredSeries(seriesId, apiKey, startDate = '1960-01-01') {
   const params = new URLSearchParams({
     series_id: seriesId,
     api_key: apiKey,
@@ -28,36 +40,6 @@ async function fetchFredSeries(seriesId, apiKey, startDate = '1970-01-01') {
       date: obs.date,
       value: parseFloat(obs.value),
     }));
-}
-
-// Fetch SPX from Yahoo Finance
-async function fetchSPX(startTimestamp = 0) {
-  const endTimestamp = Math.floor(Date.now() / 1000);
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1=${startTimestamp}&period2=${endTimestamp}&interval=1mo&events=history`;
-
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Yahoo Finance error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const result = data.chart?.result?.[0];
-  if (!result) throw new Error('No SPX data');
-
-  const timestamps = result.timestamp || [];
-  const closes = result.indicators?.quote?.[0]?.close || [];
-
-  return timestamps.map((ts, i) => {
-    const date = new Date(ts * 1000);
-    // Normalize to first of month for alignment
-    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
-    return { date: dateStr, value: closes[i] };
-  }).filter(obs => obs.value != null);
 }
 
 // Calculate YoY inflation from CPI
@@ -85,7 +67,7 @@ function toDateMap(observations) {
   return map;
 }
 
-// Get value for a month, with fallback to previous month if needed
+// Get value for a month, with fallback to previous months if needed
 function getValueForMonth(map, monthKey, maxLookback = 3) {
   for (let i = 0; i < maxLookback; i++) {
     const [year, month] = monthKey.split('-').map(Number);
@@ -96,6 +78,23 @@ function getValueForMonth(map, monthKey, maxLookback = 3) {
     }
   }
   return null;
+}
+
+// Normalize SPX values to fit on the same scale as the metric
+function normalizeForOverlay(values, metricValues) {
+  if (values.length === 0 || metricValues.length === 0) return [];
+
+  const metricMax = Math.max(...metricValues.filter(v => isFinite(v)));
+  const metricMin = Math.min(...metricValues.filter(v => isFinite(v)));
+  const spxMax = Math.max(...values);
+  const spxMin = Math.min(...values);
+
+  const metricRange = metricMax - metricMin;
+  const spxRange = spxMax - spxMin;
+
+  if (spxRange === 0) return values.map(() => metricMin);
+
+  return values.map(v => ((v - spxMin) / spxRange) * metricRange + metricMin);
 }
 
 export default async function handler(req, res) {
@@ -113,13 +112,13 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Fetch all data in parallel
+    // Fetch all data in parallel - using FRED's SP500 series
     const [unrate, fedfunds, cpi, m2, spx] = await Promise.all([
       fetchFredSeries('UNRATE', apiKey),
       fetchFredSeries('FEDFUNDS', apiKey),
       fetchFredSeries('CPIAUCSL', apiKey),
       fetchFredSeries('M2SL', apiKey),
-      fetchSPX(),
+      fetchFredSeries('SP500', apiKey),  // FRED has S&P 500 data
     ]);
 
     // Calculate YoY inflation from CPI
@@ -132,11 +131,14 @@ export default async function handler(req, res) {
     const m2Map = toDateMap(m2);
     const spxMap = toDateMap(spx);
 
-    // Get all unique months from SPX (our base timeline)
+    // Get all unique months where we have SPX data
     const months = [...spxMap.keys()].sort();
 
     // Calculate the business cycle metric for each month
     const observations = [];
+    const spxValues = [];
+    const metricValues = [];
+
     for (const month of months) {
       const spxVal = spxMap.get(month);
       const unrateVal = getValueForMonth(unrateMap, month);
@@ -153,15 +155,14 @@ export default async function handler(req, res) {
       if (unrateVal === 0) continue;
 
       // Business Cycle Metric = (SPX / UNRATE²) × USINTR × USIRYY / M2
-      // Multiply by a scaling factor for readability
       const metric = (spxVal / (unrateVal * unrateVal)) * fedfundsVal * inflationVal / m2Val;
 
-      // Only include positive values (metric can go negative with negative rates/inflation)
+      // Only include finite values
       if (isFinite(metric)) {
         observations.push({
           date: `${month}-01`,
           value: metric,
-          // Include component values for debugging/display
+          spx: spxVal,
           components: {
             spx: spxVal,
             unrate: unrateVal,
@@ -170,8 +171,16 @@ export default async function handler(req, res) {
             m2: m2Val,
           },
         });
+        spxValues.push(spxVal);
+        metricValues.push(metric);
       }
     }
+
+    // Normalize SPX values for overlay
+    const normalizedSpx = normalizeForOverlay(spxValues, metricValues);
+    observations.forEach((obs, i) => {
+      obs.spxNormalized = normalizedSpx[i];
+    });
 
     // Cache for 24 hours
     res.setHeader('Cache-Control', 's-maxage=86400');
@@ -181,6 +190,7 @@ export default async function handler(req, res) {
       formula: '(SPX / UNRATE²) × FEDFUNDS × CPI_YoY / M2',
       count: observations.length,
       observations,
+      recessions: RECESSIONS,
       timestamp: Date.now(),
     });
   } catch (error) {

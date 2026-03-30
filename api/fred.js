@@ -23,7 +23,7 @@ export default async function handler(req, res) {
   }
 
   // Valid FRED series we support
-  const validSeries = ['ICSA', 'UNRATE', 'FEDFUNDS', 'DTWEXBGS', 'CPIAUCSL', 'M2SL'];
+  const validSeries = ['ICSA', 'UNRATE', 'FEDFUNDS', 'DTWEXBGS', 'CPIAUCSL', 'M2SL', 'SP500'];
   if (!validSeries.includes(series)) {
     return res.status(400).json({ error: 'Invalid series ID' });
   }

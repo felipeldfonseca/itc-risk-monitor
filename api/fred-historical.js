@@ -33,6 +33,7 @@ export default async function handler(req, res) {
     'DTWEXBGS',  // DXY
     'CPIAUCSL',  // CPI (for inflation calculation)
     'M2SL',      // M2 Money Supply
+    'SP500',     // S&P 500 Index
   ];
 
   if (!validSeries.includes(series)) {
