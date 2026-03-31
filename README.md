@@ -1,16 +1,65 @@
-# React + Vite
+# ITC Risk Cascade Monitor
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Real-time macro cycle positioning dashboard based on Benjamin Cowen's ITC framework.
 
-Currently, two official plugins are available:
+**Live**: [https://itc-risk-monitor.vercel.app](https://itc-risk-monitor.vercel.app)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Quick Start
 
-## React Compiler
+```bash
+npm install
+npm run dev
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Environment Variables
 
-## Expanding the ESLint configuration
+Create `.env` file:
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```env
+VITE_FRED_API_KEY=your_fred_api_key_here
+```
+
+Get a free FRED API key at: https://fred.stlouisfed.org/docs/api/api_key.html
+
+## Tech Stack
+
+- React 18 + Vite
+- Recharts (Business Cycle chart)
+- TradingView Widgets (Ratio charts)
+- Vercel Serverless Functions (API proxies)
+
+## API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `/api/coingecko` | BTC and Gold prices |
+| `/api/fred?series=X` | Current FRED data (ICSA, UNRATE, FEDFUNDS, DTWEXBGS) |
+| `/api/fred-historical?series=X` | Historical FRED series |
+| `/api/business-cycle` | Business Cycle Metric calculation |
+
+## Roadmap
+
+### v1.0 (Complete)
+- [x] Cascade stage visualization
+- [x] Editable metric cards
+- [x] BTC/Gold ratio tracker
+- [x] Gold-BTC swap simulator
+- [x] Variable DCA model
+- [x] Action plan
+
+### v2.0 (Complete)
+- [x] Auto-fetch live data (FRED, CoinGecko)
+- [x] Vercel serverless API proxies
+- [x] BTC/Gold ratio chart (TradingView)
+- [x] SPX/Gold ratio chart (TradingView)
+- [x] Business Cycle Metric chart (Recharts)
+- [x] Recession bands overlay
+- [x] Mobile responsive layout
+
+### v3.0 (Planned)
+- [ ] Push notifications / Telegram alerts
+- [ ] Portfolio tracker
+
+## License
+
+MIT
