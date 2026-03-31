@@ -127,7 +127,7 @@ export function RatioCharts() {
           <div style={styles.chartLabel}>S&P 500 / Gold Ratio</div>
           <div style={styles.chartContainer}>
             <MemoizedWidget
-              symbol="FOREXCOM:SPXUSD/FOREXCOM:XAUUSD"
+              symbol="AMEX:SPY/OANDA:XAUUSD"
               containerId="spx-gold-chart"
             />
           </div>
